@@ -1,0 +1,1397 @@
+#!/usr/bin/env python
+# encoding: utf-8
+
+
+From flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response
+From werkzeug.utils import secure_filename
+Import sqlite3
+Import os
+Import sys
+Import xlrd
+Reload(sys)
+Sys.setdefaultencoding('utf-8')
+App = Flask(__name__)
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'score')
+ALLOWED_EXTENSIONS = set(['xls','XLS'],)
+App.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+App.config.update(dict(
+    DATABASE=os.path.join(app.root_path,'School.db'),
+    DEBUG=False,
+    SECRET_KEY='NiCaiBuDao',
+))
+
+# ---------------Database connection start---------------
+Def connect_db():
+    Conn = sqlite3.connect(app.config['DATABASE'])
+    Conn.row_factory = sqlite3.Row
+    Return conn
+
+
+Def get_db():
+    If not hasattr(g,'sqlite_db'): # not connected to the database
+        G.sqlite_db = connect_db()
+    Return g.sqlite_db
+
+
+@app.teardown_appcontext
+Def close_db(error):
+    If hasattr(g,'sqlite_db'):
+        G.sqlite_db.close()
+# --------------Database connection end------------------------
+
+# -------------- User Management Part start----------------------
+@app.route('/')
+@app.route('/index')
+Def index():
+Return render_template('index.html')
+
+@app.route('/login',methods=['POST','GET'])
+Def login():
+    Error = None
+    Cursor = get_db()
+    If request.method == "POST" :
+        Sql = "select * from user where username = ?"
+        Result_set = cursor.execute(sql,(request.form['username'],))
+        Result = result_set.fetchone()
+        If not result :
+            Error = "username does not exist"
+        Elif result[1] != request.form['password'] :
+            Error = "Password error"
+        Elif result[2] != request.form['role'] :
+            Error = "role error"
+        Else:
+            Error = None
+            Session['role'] = request.form['role']
+            Session['username'] = request.form['username']
+            Session['lasttime'] = result[3]
+            Session['period'] = cursor.execute("select period from period").fetchone()[0]
+            Cursor.execute("update user set lasttime = datetime('now','localtime') where username=?",(request.form['username'],))
+            Cursor.commit()
+            Msg = "Login successful, welcome" +result[0]+" Last login time: "+result[3]
+            Return redirect(url_for(session['role']+'_frame'))
+    Return render_template('login.html',error=error)
+@app.route('/logoutall')
+Def logoutall():
+    Return render_template('logoutall.html')
+
+@app.route('/logout')
+Def logout(info = None):
+    Error = None
+    Session.pop('role', None)
+    Session.pop('username', None)
+    Session.pop('lasttime', None)
+    Return redirect(url_for('login'))
+
+@app.route('/change_password',methods=['POST','GET'])
+Def change_password():
+    If not session.get('role'):
+        Error = "You are not logged in"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Oldpassword = request.form['oldpassword']
+        Newpassword = request.form['newpassword']
+        Confirmpassword = request.form['confirmpassword']
+        If newpassword != confirmpassword :
+            Return fail_msg("Confirm password does not match, please re-enter", return_url=url_for('change_password'))
+        Username = session['username']
+        Cursor =get_db()
+        Confirmpass = cursor.execute("select * from user where username = ? and password = ? ",(username,oldpassword)).fetchone()
+        If confirmpass :
+            Cursor.execute("update user set password = ? where username = ?",(newpassword,username))
+            Cursor.commit()
+            Return success_msg (content="password modified successfully, please log in again", return_url="/logoutall")
+        Else :
+            Return fail_msg(content = "The old password is incorrect, please re-enter", return_url="/change_password")
+
+    Return render_template('change_password.html')
+# --------------- User part end---------------------
+
+# ---------------Admin page start-----------------
+@app.route('/admin_main')
+Def admin_main():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    Count_s = cursor.execute("select count(*) from student").fetchone()[0]
+    Count_t = cursor.execute("select count(*) from teacher").fetchone()[0]
+    Count_c = cursor.execute("select count(*) from course").fetchone()[0]
+    Period = cursor.execute("select period from period").fetchone()[0]
+    Data = dict()
+    Data['username'] = session['username']
+    Data['lasttime'] = session['lasttime']
+    Data['count_c'] = count_c
+    Data['count_s'] = count_s
+    Data['count_t'] = count_t
+    Data['period'] = period
+    Return render_template('admin_main.html',data=data)
+
+@app.route('/admin_frame')
+Def admin_frame():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_frame.html')
+
+@app.route('/admin_cou')
+Def admin_cou():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_cou.html')
+
+@app.route('/admin_cou_add',methods=['POST','GET'])
+Def admin_cou_add():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cursor = get_db()
+        Cno = request.form['cno']
+        Cname = request.form['cname']
+        Ccredit = request.form['ccredit']
+        Result_set=cursor.execute("select * from course where cno =?",(cno,))
+        If result_set.fetchone():
+            Return fail_msg(content="This course already exists", return_url='/admin_cou_add')
+        Else:
+            Sql="insert into course(cno,cname,ccredit) values(?,?,?)"
+            Cursor.execute(sql, (cno,cname,ccredit))
+            Cursor.commit()
+            Return success_msg(content="successfully added course", return_url=url_for('admin_cou_add'))
+    Return render_template('admin_cou_add.html')
+
+@app.route('/admin_cou_import',methods=['POST','GET'])
+Def admin_cou_import():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Import_xls = request.files['import_xls']
+        If import_xls and allowed_file(import_xls.filename) :
+            Import_xls_name = secure_filename(import_xls.filename)
+            Import_xls.save(os.path.join(app.config['UPLOAD_FOLDER'], import_xls_name))
+        Stu_table = xlrd.open_workbook('static/score/'+import_xls_name).sheets()[0]
+        Count_row = stu_table.nrows
+        Cursor = get_db()
+        For i in range(count_row) :
+            Cno = stu_table.row_values(i)[0]
+            Cname = stu_table.row_values(i)[1]
+            Ccredit = int(stu_table.row_values(i)[2])
+            Result_set=cursor.execute("select * from course where cno =?",(cno,))
+            If not result_set.fetchone():
+                Sql="insert into course(cno,cname,ccredit) values(?,?,?)"
+                Cursor.execute(sql, (cno,cname,ccredit))
+                Cursor.commit()
+        Cursor.commit()
+        Return success_msg(content="successfully imported course", return_url=url_for('admin_cou_add'))
+    Return render_template('admin_cou_add.html')
+
+@app.route('/admin_cou_del',methods=['POST','GET'])
+@app.route('/admin_cou_del/<cno>',methods=['POST','GET'])
+Def admin_cou_del(cno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not cno:
+        Return render_template('admin_cou_del.html')
+    Cursor = get_db()
+    If not cno :
+        Cno = request.form['cno']
+    Result_set=cursor.execute("select * from course where cno =?",(cno,))
+    If not result_set.fetchone():
+        Return fail_msg(content="This course does not exist", return_url='/admin_cou_del')
+    Cou = cursor.execute("select * from tc where cno =?",(cno,)).fetchone()
+    If cou :
+        Return fail_msg("There is a teacher to open this course, cannot be deleted", '/admin_cou_del')
+    Cursor.execute("delete from course where cno=?", (cno,))
+    Cursor.commit()
+    Return success_msg(content="delete successfully", return_url=url_for('admin_cou_del'))
+ 
+    
+@app.route('/admin_cou_sel')
+Def admin_cou_sel():
+    If not session.get('role') or (session['role'] != 'admin' and session['role'] != 'teacher') :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_cou_sel.html')
+
+@app.route('/admin_cou_selrs',methods=['POST','GET'])
+Def admin_cou_selrs():
+    If not session.get('role') or (session['role'] != 'admin' and session['role'] != 'teacher') :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cno = '%'+request.form['cno']+'%'
+        Cname = '%'+request.form['cname']+'%'
+        Ccredit = '%'+request.form['ccredit']+'%'
+        Sql = "select * from course where cno like ? and cname like ? and ccredit like ?"
+        Cursor = get_db()
+        Result_set = cursor.execute(sql, (cno, cname, ccredit))
+        Cous = result_set.fetchall()
+        Data = []
+        For cou in cous :
+            Info = dict()
+            Info['cno'] = cou[0]
+            Info['cname'] = cou[1]
+            Info['ccredit'] = cou[2]
+            Data.append(info)
+        Return render_template('admin_cou_selrs.html', data=data)
+    Return render_template('admin_cou_sel.html')
+
+@app.route('/admin_cou_set')
+@app.route('/admin_cou_set/<period>')
+Def admin_cou_set(period=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If period == 'begin' :
+        Cursor = get_db()
+        Sql = "update period set period='choice class'"
+        Cursor.execute(sql)
+        Sql = "update period set date=datetime('now','localtime')"
+        Cursor.commit()
+        Session['period'] = "choice"
+        Return success_msg(content=u"Starts the course setting successfully", return_url='/admin_cou_set')
+    Elif period == 'end' :
+        Cursor = get_db()
+        Sql = "update period set period='learning'"
+        Cursor.execute(sql)
+        Sql = "update period set date=datetime('now','localtime')"
+        Cursor.commit()
+        Session['period'] = "learning"
+        Return success_msg(content=u'end the class setting is successful', return_url='/admin_cou_set')
+    Else :
+        Return render_template('admin_cou_set.html')
+
+@app.route('/admin_cou_upd',methods=['POST','GET'])
+@app.route('/admin_cou_upd/<cno>',methods=['POST','GET'])
+Def admin_cou_upd(cno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not cno :
+        Return render_template('admin_cou_upd.html')
+    If not cno :
+        Cno = request.form['cno']
+    Cursor = get_db()
+    Result_set = cursor.execute("select * from course where cno=?",(cno,))
+    Data = result_set.fetchone()
+    If data :
+        Return render_template('admin_cou_updrs.html',data=data)
+    Else :
+        Return fail_msg(content="This course does not exist", return_url="/admin_cou_upd")
+
+
+@app.route('/admin_cou_updrs',methods=['POST','GET'])
+Def admin_cou_updrs():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cursor = get_db()
+        Cno = request.form['cno']
+        Cname = request.form['cname']
+        Ccredit = request.form['ccredit']
+        Cursor.execute("update course set cname=?,ccredit=? where cno = ?",(cname, ccredit, cno))
+        Cursor.commit()
+        Return success_msg(content="course information updated successfully", return_url='/admin_cou_upd')
+    Return render_template('admin_cou_upd.html')
+
+@app.route('/admin_navi')
+Def admin_navi():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_navi.html')
+
+@app.route('/admin_stu')
+Def admin_stu():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_stu.html')
+
+#增学生
+@app.route('/admin_stu_add',methods=['POST','GET'])
+Def admin_stu_add():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cursor = get_db()
+        Sno = request.form['sno']
+        Sname = request.form['sname']
+        Ssex = request.form['ssex']
+        Sage = request.form['sage']
+        Sdept = request.form['sdept']
+        Sphone = request.form['sphone']
+        Spassword = request.form['spassword']
+        Result_set=cursor.execute("select * from student where sno =?",(sno,))
+        If result_set.fetchone():
+            Return fail_msg(content="The student already exists", return_url='/admin_stu_add')
+        Else:
+            Sql="insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
+            Cursor.execute(sql, (sno,sname,ssex,sage,sdept,sphone))
+            Cursor.execute("insert into user(username,password,role,lasttime) values(?,?,?,?)", (sno,spassword,'student',u' you are logging into the system for the first time))
+            Cursor.commit()
+            Return success_msg(content="successfully added the student", return_url=url_for('admin_stu_add'))
+    Return render_template('admin_stu_add.html')
+
+@app.route('/admin_stu_import',methods=['POST','GET'])
+Def admin_stu_import():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Import_xls = request.files['import_xls']
+        If import_xls and allowed_file(import_xls.filename) :
+            Import_xls_name = secure_filename(import_xls.filename)
+            Import_xls.save(os.path.join(app.config['UPLOAD_FOLDER'], import_xls_name))
+        Stu_table = xlrd.open_workbook('static/score/'+import_xls_name).sheets()[0]
+        Count_row = stu_table.nrows
+        Cursor = get_db()
+        For i in range(count_row) :
+            Sno = stu_table.row_values(i)[0]
+            Sname = stu_table.row_values(i)[1]
+            Ssex = stu_table.row_values(i)[2]
+            Sage = int(stu_table.row_values(i)[3])
+            Sdept = stu_table.row_values(i)[4]
+            Sphone = int(stu_table.row_values(i)[5])
+            Spassword = stu_table.row_values(i)[6]
+            Result_set=cursor.execute("select * from student where sno =?",(sno,))
+            If not result_set.fetchone():
+                Sql="insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
+                Cursor.execute(sql, (sno,sname,ssex,sage,sdept,sphone))
+                Cursor.execute("insert into user(username,password,role,lasttime) values(?,?,?,?)", (sno,spassword,'student',u' you are logging into the system for the first time))
+        Cursor.commit()
+        Return success_msg(content="successfully imported students", return_url=url_for('admin_stu_add'))
+    Return render_template('admin_stu_add.html')
+# 删除学生
+@app.route('/admin_stu_del/<sno>',methods=['POST','GET'])
+@app.route('/admin_stu_del',methods=['POST','GET'])
+Def admin_stu_del(sno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not sno:
+        Return render_template('admin_stu_del.html')
+    Cursor = get_db()
+    If not sno:
+        Sno = request.form['sno']
+    Result_set=cursor.execute("select * from student where sno =?",(sno,))
+    If not result_set.fetchone():
+        Return fail_msg(content="This student does not exist", return_url='/admin_stu_del')
+    Cursor.execute("delete from user where username=?", (sno,))
+    Cursor.execute("delete from student where sno=?", (sno,))
+    Cursor.execute("delete from sc where sno=?",(sno,))
+    Cursor.commit()
+    Return success_msg(content="delete successfully", return_url=url_for('admin_stu_del'))
+
+
+@app.route('/admin_stu_sel')
+Def admin_stu_sel():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_stu_sel.html')
+
+@app.route('/admin_stu_selrs',methods=['POST','GET'])
+Def admin_stu_selrs():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Sno = '%'+request.form['sno']+'%'
+        Sname = '%'+request.form['sname']+'%'
+        Sdept = '%'+request.form['sdept']+'%'
+        Sql = "select * from student where sno like ? and sname like ? and sdept like ?"
+        Cursor = get_db()
+        Result_set = cursor.execute(sql, (sno, sname, sdept))
+        Stus = result_set.fetchall()
+        Data = []
+        For stu in stus :
+            Info = dict()
+            Password = cursor.execute("select password from user where username= ?", (stu[0],)).fetchone()[0]
+            Sum_credit = cursor.execute("select sum(ccredit) from sc ,course\
+                                         Where sc.cno = course.cno and grade >60 and sno =?", (stu[0],)).fetchone()
+            Avg_grade = cursor.execute("select avg(grade) from sc,course\
+                                         Where sc.cno=course.cno and sno=?",(stu[0],)).fetchone()
+            Info['sno'] = stu[0]
+            Info['sname'] = stu[1]
+            Info['ssex'] = stu[2]
+            Info['sage'] = stu[3]
+            Info['sphone'] = stu[4]
+            Info['sdept'] = stu[5]
+            Info['spassword'] = password;
+            If not avg_grade or not avg_grade[0]:
+                Info['avg_grade'] = 0
+            Else :
+                Info['avg_grade'] = avg_grade[0]
+            Rank = cursor.execute("select count(*)+1 as count\
+                                  From (select sno , avg(grade) as stu_avg\
+                                  From sc,course where sc.cno=course.cno group by sno)\
+                                  Where stu_avg>?",(info['avg_grade'],)).fetchone()
+            If rank :
+                Info['rank'] = rank[0]
+            Else :
+                Info['rank'] = 1
+            If sum_credit and sum_credit[0]:
+                Info['sum_credit'] = sum_credit[0]
+            Else :
+                Info['sum_credit'] = 0
+            Data.append(info)
+        Return render_template('admin_stu_selrs.html', data=data)
+    Return redirect(url_for('admin_stu_sel'))
+# Update student information
+@app.route('/admin_stu_upd',methods=['GET','POST'])
+@app.route('/admin_stu_upd/<sno>',methods=['GET','POST'])
+Def admin_stu_upd(sno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not sno:
+        Return render_template('admin_stu_upd.html')
+    If not sno :
+        Sno = request.form['sno']
+    Cursor = get_db()
+    Result_set = cursor.execute("select * from student where sno=?",(sno,))
+    Data = result_set.fetchone()
+    If data :
+        Password = cursor.execute("select password from user where username = ?",(sno,)).fetchone()[0]
+        Return render_template('admin_stu_updrs.html',data=data,spassword=password)
+    Else :
+        Return fail_msg(content="This student does not exist", return_url="/admin_stu_upd")
+
+@app.route('/admin_stu_updrs',methods=['GET','POST'])
+Def admin_stu_updrs():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+        Return success_msg(content="student information update succeeded", return_url='/admin_stu_upd')
+    If request.method == 'POST' :
+        Cursor = get_db()
+        Sno = request.form['sno']
+        Sname = request.form['sname']
+        Ssex = request.form['ssex']
+        Sage = request.form['sage']
+        Sdept = request.form['sdept']
+        Sphone = request.form['sphone']
+        Spassword = request.form['spassword']
+        Cursor.execute("update student set sname=?,sage=?,ssex=?,sdept=?,sphone=? where sno=?",(sname,sage,ssex,sdept,sphone,sno))
+        Cursor.execute("update user set password=? where username = ?",(spassword,sno))
+        Cursor.commit()
+        Return success_msg(content="student information update succeeded", return_url='/admin_stu_upd')
+    Return render_template('admin_stu_upd.html')
+
+@app.route('/admin_tea')
+Def admin_tea():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_tea.html')
+
+@app.route('/admin_tea_add',methods=['POST','GET'])
+Def admin_tea_add():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST':
+        Tno = request.form['tno']
+        Tname = request.form['tname']
+        Tphone = request.form['tphone']
+        Tpassword = request.form['tpassword']
+        Cursor = get_db()
+        Result_set = cursor.execute("select * from teacher where tno=?",(tno,))
+        If result_set.fetchone():
+            Return fail_msg(content='teacher ID already exists', return_url='/admin_tea_add')
+        Cursor.execute("insert into teacher(tno,tname,tphone) values(?,?,?)",(tno,tname,tphone))
+        Cursor.execute("insert into user(username,password,role,lasttime) values(?,?,?,?)",(tno,tpassword,'teacher',u' you are logging into the system for the first time))
+        Cursor.commit()
+        Return success_msg(content='teacher entry success', return_url='/admin_tea_add')
+    Return render_template('admin_tea_add.html')
+@app.route('/admin_tea_import',methods=['POST','GET'])
+Def admin_tea_import():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Import_xls = request.files['import_xls']
+        If import_xls and allowed_file(import_xls.filename) :
+            Import_xls_name = secure_filename(import_xls.filename)
+            Import_xls.save(os.path.join(app.config['UPLOAD_FOLDER'], import_xls_name))
+        Stu_table = xlrd.open_workbook('static/score/'+import_xls_name).sheets()[0]
+        Count_row = stu_table.nrows
+        Cursor = get_db()
+        For i in range(count_row) :
+            Tno = stu_table.row_values(i)[0]
+            Tname = stu_table.row_values(i)[1]
+            Tphone = int(stu_table.row_values(i)[2])
+            Tpassword = stu_table.row_values(i)[3]
+            Result_set=cursor.execute("select * from teacher where tno =?",(tno,))
+            If not result_set.fetchone():
+                Sql="insert into teacher(tno,tname,tphone) values(?,?,?)"
+                Cursor.execute(sql, (tno,tname,tphone))
+                Cursor.execute("insert into user(username,password,role,lasttime) values(?,?,?,?)", (tno,tpassword,'teacher',u' you are logging into the system for the first time))
+        Cursor.commit()
+        Return success_msg(content="successfully imported teacher", return_url=url_for('admin_tea_add'))
+    Return render_template('admin_tea_add.html')
+
+#去除老师
+@app.route('/admin_tea_del/<tno>',methods=['POST','GET'])
+@app.route('/admin_tea_del',methods=['POST','GET'])
+Def admin_tea_del(tno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not tno:
+        Return render_template('admin_tea_del.html')
+    Cursor = get_db()
+    If not tno:
+        Tno = request.form['tno']
+    Result_set = cursor.execute("select * from teacher where tno=?",(tno,))
+    If not result_set.fetchone():
+            Return fail_msg(content='teacher ID does not exist', return_url='/admin_tea_del')
+    Cou = cursor.execute("select * from tc where tno=?",(tno,)).fetchone()
+    If cou :
+        Return fail_msg("This teacher started with a course, cannot be deleted", '/admin_tea_del')
+    Cursor.execute("delete from user where username=?", (tno,))
+    Cursor.execute("delete from teacher where tno=?", (tno,))
+    Cursor.commit()
+    Return success_msg(content="delete successfully", return_url=url_for('admin_tea_del'))
+
+@app.route('/admin_tea_sel')
+Def admin_tea_sel():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    Return render_template('admin_tea_sel.html')
+
+@app.route('/admin_tea_selrs',methods=['POST','GET'])
+Def admin_tea_selrs():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Tno = '%'+request.form['tno']+'%'
+        Tname = '%'+request.form['tname']+'%'
+        Sql = "select * from teacher where tno like ? and tname like ?"
+        Cursor = get_db()
+        Result_set = cursor.execute(sql, (tno, tname))
+        Teas = result_set.fetchall()
+        Data = []
+        For tea in teas :
+            Info = dict()
+            Tpassword = cursor.execute("select password from user where username= ?", (tea[0],)).fetchone()[0]
+            Info['tno'] = tea[0]
+            Info['tname'] = tea[1]
+            Info['tphone'] = tea[2]
+            Info['tpassword'] = tpassword
+            Data.append(info)
+        Return render_template('admin_tea_selrs.html', data=data)
+    Return render_template('admin_tea_selrs.html')
+
+@app.route('/admin_tea_upd',methods=['POST','GET'])
+@app.route('/admin_tea_upd/<tno>',methods=['POST','GET'])
+Def admin_tea_upd(tno=None):
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method != 'POST' and not tno :
+        Return render_template('admin_tea_upd.html')
+    Cursor = get_db()
+    If not tno :
+        Tno = request.form['tno']
+    Result_set = cursor.execute("select * from teacher where tno=?",(tno,))
+    Data = result_set.fetchone()
+    If data :
+        Password = cursor.execute("select password from user where username = ?",(tno,)).fetchone()[0]
+        Return render_template('admin_tea_updrs.html',data=data,tpassword=password)
+    Else :
+        Return fail_msg(content="The teacher does not exist", return_url="/admin_tea_upd")
+    Return render_template('admin_tea_upd.html')
+
+
+@app.route('/admin_tea_updrs',methods=['POST','GET'])
+Def admin_tea_updrs():
+    If not session.get('role') or session['role'] != 'admin' :
+        Error = "You are not logged in or you are not an administrator"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cursor = get_db()
+        Tno = request.form['tno']
+        Tname = request.form['tname']
+        Tphone = request.form['tphone']
+        Tpassword = request.form['tpassword']
+        Cursor.execute("update teacher set tname=?,tphone=? where tno=?",(tname,tphone,tno))
+        Cursor.execute("update user set password=? where username = ?",(tpassword,tno))
+        Cursor.commit()
+        Return success_msg(content="Teacher information updated successfully", return_url='/admin_tea_upd')
+    Return render_template('admin_tea_upd.html')
+
+# --------------------Adminendend---------------
+
+# --------------------student start---------------
+
+@app.route('/student_cho')
+Def student_cho():
+    If not session.get('role') or session['role'] != 'student' :
+        Error = "You are not logged in or you are not a student"
+        Return render_template("login.html",error=error)
+    Return render_template('student_cho.html')
+
+@app.route('/student_cho_del/<cno>',methods=['POST','GET'])
+Def student_cho_del(cno):
+    If not session.get('role') or session['role'] != 'student' :
+        Error = "You are not logged in or you are not a student"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    If cursor.execute("select period from period ").fetchone()[0] != "choice":
+        Return fail_msg("Now is not an elective period, you cannot delete a course")
+    Cursor.execute("delete from sc where sno=? and cno=?",(session['username'],cno))
+    Print session['username']
+    Cursor.commit()
+    Return success_msg("delete successfully", "/student_cho_sub")
+@app.route('/student_cho_sel',methods=['POST','GET'])
+Def student_cho_sel():
+    If not session.get('role') or session['role'] != 'student' :
+        Error = "You are not logged in or you are not a student"
+        Return render_template("login.html",error=error)
+    If request.method == 'POST' :
+        Cno = '%'+request.form['cno']+'%'
+        Cname = '%'+request.form['cname']+'%'
+        Ccredit = '%'+request.form['ccredit']+'%'
+        Ctime = '%'+request.form['ctime1'] + request.form['ctime2']+'%'
+        Clocation = '%'+request.form['clocation']+'%'
+        Tname = '%'+request.form['tname']+'%'
+        Cursor = get_db()
+        Result_set = cursor.execute("select course.cno,cname,ccredit,clocation,cmaxcount,teacher.tno,tname,ctime from teacher,tc,course where\
+                                    Tc.cno=course.cno and tc.tno=teacher.tno and tc.tno like ? and cname like ? and ccredit like ? and ctime like ?\
+                                    And clocation like ? and tname like ?",(cno,cname,ccredit,ctime,clocation,tname)).fetchall()
+        Data = []
+        For cou in result_set :
+            Info =dict()
+            Info['cno'] = cou[0]
+            Info['cname'] = cou[1]
+            Info['ccredit'] = cou[2]
+            Info['clocation'] = cou[3]
+            Info['cmaxcount'] = cou[4]
+            Info['tno'] = cou[5]
+            Info['tname'] = cou[6]
+            Info['ctime'] = cou[7]
+            Res = cursor.execute("select count(*) from sc where cno=?",(cou[0],)).fetchone()
+            Info['cselected'] = res[0]
+            Data.append(info)
+        Return render_template('student_cho_selrs.html',data=data)
+    Return render_template('student_cho_sel.html')
+@app.route('/student_cho_sel_cno/<cno>',methods=['POST','GET'])
+Def student_cho_sel_cno(cno=None):
+    If not session.get('role') :
+        Error = "You are not logged in"
+        Return render_template("login.html",error=error)
+    If not cno :
+        Return fail_msg("This course does not exist!")
+    Cursor = get_db()
+    Cou = cursor.execute("select course.cno,cname,ccredit,clocation,cmaxcount,teacher.tno,tname,ctime from teacher,tc,course where\
+                                    Tc.cno=course.cno and tc.tno=teacher.tno and tc.cno=?",(cno,)).fetchone()
+    Data = []
+    Info =dict()
+    Info['cno'] = cou[0]
+    Info['cname'] = cou[1]
+    Info['ccredit'] = cou[2]
+    Info['clocation'] = cou[3]
+    Info['cmaxcount'] = cou[4]
+    Info['tno'] = cou[5]
+    Info['tname'] = cou[6]
+    Info['ctime'] = cou[7]
+    Res = cursor.execute("select count(*) from sc where cno=?",(cou[0],)).fetchone()
+    Info['cselected'] = res[0]
+    Data.append(info)
+    Return render_template('student_cho_selrs.html',data=data)
+@app.route('/student_cou_cloud')
+Def student_cou_cloud():
+    If not session.get('role') :
+        Error = "You are not logged in"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    Cous = cursor.execute("select sc.cno,cname,count(*) as count from sc,course where sc.cno = course.cno group by sc.cno order by sc.cno desc limit 0,10"). Fetchall()
+    Tags = "<tags>"
+    For cou in cous :
+        Link = "<a href='/student_cho_sel_cno/"+cou[0]+"' style='22' color='0xff0000' hicolor='0x00cc00'>"+cou[0]+"</a>"
+        Tags = tags + link
+    Tags = tags + "</tags>"
+    Print "zheli"
+    Print tags
+    Return render_template('tags_cloud.html',title='hot class', tags=tags)
+
+#学生标签云
+@app.route('/student_stu_sel_sno/<sno>',methods=['POST','GET'])
+Def student_sel_sno(sno=None):
+    If not session.get('role') :
+        Error = "You are not logged in"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    Stu = cursor.execute("select * from student where sno=?", (sno,)).fetchone()
+    Data = []
+    Info = dict()
+    Sum_credit = cursor.execute("select sum(ccredit) from sc ,course\
+                                 Where sc.cno = course.cno and grade >60 and sno =?", (stu[0],)).fetchone()
+    Avg_grade = cursor.execute("select avg(grade) from sc,course\
+                                 Where sc.cno=course.cno and sno=?",(stu[0],)).fetchone()
+    Info['sno'] = stu[0]
+    Info['sname'] = stu[1]
+    Info['ssex'] = stu[2]
+    Info['sage'] = stu[3]
+    Info['sphone'] = stu[4]
+    Info['sdept'] = stu[5]
+    If not avg_grade or not avg_grade[0]:
+        Info['avg_grade'] = 0
+    Else :
+        Info['avg_grade'] = avg_grade[0]
+    Rank = cursor.execute("select count(*)+1 as count\
+                          From (select sno , avg(grade) as stu_avg\
+                          From sc,course where sc.cno=course.cno group by sno)\
+                          Where stu_avg>?",(info['avg_grade'],)).fetchone()
+    If rank :
+        Info['rank'] = rank[0]
+    Else :
+        Info['rank'] = 1
+    If sum_credit and sum_credit[0]:
+        Info['sum_credit'] = sum_credit[0]
+    Else :
+        Info['sum_credit'] = 0
+    Data.append(info)
+    Return render_template('student_sel_other_rs.html',data=data)
+
+@app.route('/student_stu_cloud')
+Def student_stu_cloud():
+    If not session.get('role') :
+        Error = "You are not logged in"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    Stus = cursor.execute("select sc.sno,sname,avg(grade) as avg from sc,student where sc.sno= student.sno group by sc.sno order by avg desc limit 0,10").fetchall( )
+    Tags = "<tags>"
+    For stu in stus :
+        Link = "<a href='/student_stu_sel_sno/"+stu[0]+"' style='22' color='0xff0000' hicolor='0x00cc00'>"+stu[0]+"</a>"
+        Tags = tags + link
+    Tags = tags + "</tags>"
+    Return render_template('tags_cloud.html',title='student ranking', tags=tags)
+@app.route('/student_cho_selrs')
+Def student_cho_selrs():
+    If not session.get('role') or session['role'] != 'student' :
+        Error = "You are not logged in or you are not a student"
+        Return render_template("login.html",error=error)
+    Return render_template('student_cho_sel.html')
+
+@app.route('/student_cho_sub',methods=['POST','GET'])
+Def student_cho_sub():
+    If not session.get('role') or session['role'] != 'student' :
+        Error = "You are not logged in or you are not a student"
+        Return render_template("login.html",error=error)
+    Cursor = get_db()
+    If request.method == 'POST' :
+        If cursor.execute("select period from period").fetchone()[0] != "choice":
+            Return fail_msg("Now is not an elective period, you cannot choose a course", '/student_cho_sub')
+        Cno = request.form['cno']
+        Exist = cursor.execute("select * from tc where cno=?",(cno,)).fetchone()
+        If not exist or not exist[0] :
+            Return fail_msg(content="This lesson does not exist!", return_url="/student_cho_sub")
+        Ctime = cursor.execute("select ctime from tc where cno=?",(cno,)).fetchone()[0]
+        Time_conflict = cursor.execute("select * from sc,tc where sc.cno=tc.cno and sno=? and ctime=?",(session['username'],ctime)).fetchone()
+        If time_conflict :
+            Return fail_msg("Your class time conflicts with this course, please adjust and select", '/student_cho_sub')
+        cmaxcount = cursor.execute("select cmaxcount from tc where cno=?",(cno,)).fetchone()[0]
+        cselected = cursor.execute("select count(*) from sc where cno=?",(cno,)).fetchone()[0]
+        if cmaxcount <= cselected :
+            return fail_msg("该课程容量已满，请选择其他课程",return_url="/student_cho_sub")
+        cursor.execute("insert into sc(sno,cno) values(?,?)",(session['username'],cno))
+        cursor.commit()
+        return success_msg("选课成功!",return_url="/student_cho_sub")
+    cous = cursor.execute("select sc.cno,cname,ccredit,tname,ctime,clocation from course,sc,tc,teacher where sc.sno=? and course.cno=sc.cno and tc.cno=sc.cno and tc.tno=teacher.tno",(session['username'],)).fetchall()
+    return render_template('student_cho_sub.html',cous=cous)
+@app.route('/student_cho_sub_cno/<cno>',methods=['POST','GET'])
+def student_cho_sub_cno(cno):
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    if cursor.execute("select period from period").fetchone()[0] != "选课" :
+        return fail_msg("现在不是选课时期，不能选择课程",'/student_cho_sub')
+    exist = cursor.execute("select * from tc where cno=?",(cno,)).fetchone()
+    if not exist or not exist[0] :
+        return fail_msg(content="该课程不存在!", return_url="/student_cho_sub")
+    ctime = cursor.execute("select ctime from tc where cno=?",(cno,)).fetchone()[0]
+    time_conflict =  cursor.execute("select * from sc,tc where sc.cno=tc.cno and sno=? and ctime=?",(session['username'],ctime)).fetchone()
+    if time_conflict :
+        return fail_msg("您的上课时间与此课程冲突，请调节后进行选择",'/student_cho_sub')
+    cmaxcount = cursor.execute("select cmaxcount from tc where cno=?",(cno,)).fetchone()[0]
+    cselected = cursor.execute("select count(*) from sc where cno=?",(cno,)).fetchone()[0]
+    if cmaxcount <= cselected :
+        return fail_msg("该课程容量已满，请选择其他课程",return_url="/student_cho_sub")
+    cursor.execute("insert into sc(sno,cno) values(?,?)",(session['username'],cno))
+    cursor.commit()
+    return success_msg("选课成功!",return_url="/student_cho_sub")
+@app.route('/student_frame')
+def student_frame():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    return render_template('student_frame.html')
+
+@app.route('/student_main')
+def student_main():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    info = dict()
+    stu = cursor.execute("select sno,sname,ssex,sdept from student where sno=?",(session['username'],)).fetchone()
+    sum_credit = cursor.execute("select sum(ccredit) from sc ,course\
+                                 where sc.cno = course.cno and grade >60 and sno =?", (stu[0],)).fetchone()
+    avg_grade = cursor.execute("select avg(grade) from sc,course\
+                                where sc.cno=course.cno and sno=?",(stu[0],)).fetchone()
+    info['sno'] = stu[0]
+    info['sname'] = stu[1]
+    info['sdept'] = stu[2]
+    info['lasttime'] = session['lasttime']
+    info['period'] = cursor.execute("select period from period").fetchone()[0]
+    if info['period'] == '选课' :
+        info['message'] = "你可以进行选课"
+    else :
+        info['message'] = "你可以查看已选课程"
+    if  not avg_grade  or not avg_grade[0]:
+        info['avg_grade'] = 0
+    else :
+        info['avg_grade'] = avg_grade[0]
+    rank = cursor.execute("select count(*)+1 as count\
+                          from (select sno ,avg(grade) as stu_avg\
+                          from sc,course where sc.cno=course.cno group by sno)\
+                          where stu_avg>?",(info['avg_grade'],)).fetchone()
+    if rank :
+        info['rank'] = rank[0]
+    else :
+        info['rank'] = 1
+    if  sum_credit and sum_credit[0]:
+        info['sum_credit'] = sum_credit[0]
+    else :
+        info['sum_credit'] = 0
+    return render_template('student_main.html',stu_info=info)
+
+
+@app.route('/student_menu')
+def student_menu():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    return render_template('student_menu.html')
+
+@app.route('/student_navi')
+def student_navi():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    return render_template('student_navi.html')
+
+@app.route('/student_sel')
+def student_sel():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    return render_template('student_sel.html')
+
+@app.route('/student_sel_other')
+def student_sel_other():
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    return render_template('student_sel_other.html')
+
+@app.route('/student_sel_other_cours/<sno>',methods=['POST','GET'])
+def student_sel_other_cours(sno):
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    cous = cursor.execute("select sc.cno,cname,ccredit,ctime,clocation,grade,cstatus from course,sc,tc where sc.sno=? and course.cno=sc.cno and tc.cno=sc.cno",(sno,)).fetchall()
+    data = dict() 
+    for cou in cous :
+        if cou[6] == "已提交" :
+            info = dict() 
+            info['rank'] = cursor.execute("select count(*)+1 from sc where cno=? and grade>?",(cou[0],cou[5])).fetchone()[0]
+            data[cou[0]] = info
+    return render_template('student_sel_other_cours.html',data=data,cous=cous,sno=sno)
+
+@app.route('/student_sel_other_rs',methods=['POST','GET'])
+def student_sel_other_rs():
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    if request.method == 'POST' :
+        sno = '%'+request.form['sno']+'%'
+        sdept = '%'+request.form['sdept']+'%'
+        sname = '%'+request.form['sname']+'%'
+        cursor = get_db()
+        result_set = cursor.execute("select * from student where sno like ? and sname like ? and sdept like ?", (sno, sname, sdept)) 
+        stus = result_set.fetchall()
+        data = []
+        for stu in stus :
+            info = dict()
+            sum_credit = cursor.execute("select sum(ccredit) from sc ,course\
+                                         where sc.cno = course.cno and grade >60 and sno =?", (stu[0],)).fetchone()
+            avg_grade = cursor.execute("select avg(grade) from sc,course\
+                                         where sc.cno=course.cno and sno=?",(stu[0],)).fetchone()
+            info['sno'] = stu[0]
+            info['sname'] = stu[1]
+            info['ssex'] = stu[2]
+            info['sage'] = stu[3]
+            info['sphone'] = stu[4]
+            info['sdept'] = stu[5]
+            if  not avg_grade  or not avg_grade[0]:
+                info['avg_grade'] = 0
+            else :
+                info['avg_grade'] = avg_grade[0]
+            rank = cursor.execute("select count(*)+1 as count\
+                                  from (select sno ,avg(grade) as stu_avg\
+                                  from sc,course where sc.cno=course.cno group by sno)\
+                                  where stu_avg>?",(info['avg_grade'],)).fetchone()
+            if rank :
+                info['rank'] = rank[0]
+            else :
+                info['rank'] = 1
+            if  sum_credit and sum_credit[0]:
+                info['sum_credit'] = sum_credit[0]
+            else :
+                info['sum_credit'] = 0
+            data.append(info)
+        return render_template('student_sel_other_rs.html',data=data)
+    return render_template('student_sel_other.html')
+
+@app.route('/student_sel_self')
+def student_sel_self():
+    if not session.get('role') or session['role'] != 'student' :
+        error = "您尚未登录或您不是学生"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    cous = cursor.execute("select sc.cno,cname,ccredit,ctime,clocation,grade,cstatus from course,sc,tc where sc.sno=? and course.cno=sc.cno and tc.cno=sc.cno",(session['username'],)).fetchall()
+    data = dict() 
+    for cou in cous :
+        if cou[6] == "已提交" :
+            info = dict() 
+            info['rank'] = cursor.execute("select count(*)+1 from sc where cno=? and grade>?",(cou[0],cou[5])).fetchone()[0]
+            data[cou[0]] = info
+    return render_template('student_sel_self.html',cous=cous,data=data)
+
+#   --------------student end----------------------
+
+#   --------------teacher start--------------------
+@app.route('/teacher_cho')
+def teacher_cho():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    data =dict()
+    data['tno'] = session['username']
+    return render_template('teacher_cho.html',data=data)
+
+@app.route('/teacher_cho_del',methods=['POST','GET'])
+def teacher_cho_del():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    cursor =get_db() 
+    period = cursor.execute("select period from period").fetchone()[0]
+    if period != '选课' :
+        return fail_msg(content="现在不是选课时期，不能删除课程")
+    tno = session['username']
+    if request.method == 'POST' :
+        cnos = request.form.getlist('to_delete')
+        for cno in cnos :
+            print "here"
+            print cno
+            cursor.execute("delete from tc where cno =?",(cno,))
+        cursor.commit()
+        return success_msg(content="删除成功", return_url="/teacher_cho_del") 
+    else :
+        cous = cursor.execute("select * from tc where tno = ?",(tno,)).fetchall()
+        data = []
+        if cous :
+            for cou in cous :
+                info = dict()
+                info['cno'] = cou[1]
+                res = cursor.execute("select cname,ccredit from course where cno = ?",(cou[1],)).fetchone()
+                info['cname'] = res[0]
+                info['ccredit'] = res[1]
+                result = cursor.execute("select count(*) from sc where cno = ?",(info['cno'],)).fetchone()
+                if result : 
+                    info['cstudentcount'] = result[0]
+                else :
+                    info['cstudentcount'] = 0
+                if info['cstudentcount'] == 0 :
+                    data.append(info)
+        return render_template('teacher_cho_del.html',data=data)
+
+@app.route('/teacher_cho_sel')
+def teacher_cho_sel():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_cho_sel.html')
+
+@app.route('/teacher_cho_selrs',methods=['POST','GET'])
+def teacher_cho_selrs():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    if request.method == 'POST' :
+        cno = '%'+request.form['cno']+'%'
+        cname = '%'+request.form['cname']+'%'
+        ccredit = '%'+request.form['ccredit']+'%'
+        sql = "select * from course where cno like ? and cname like ? and ccredit like ?"
+        cursor = get_db()
+        result_set = cursor.execute(sql, (cno, cname, ccredit)) 
+        cous = result_set.fetchall()
+        data = []
+        for cou in cous :
+            info = dict()
+            info['cno'] = cou[0]
+            info['cname'] = cou[1]
+            info['ccredit'] = cou[2]
+            data.append(info)
+        return render_template('teacher_cho_selrs.html', data=data)
+    return render_template('teacher_cho_sel.html')
+
+@app.route('/teacher_cho_sel_cno/<cno>',methods=['POST','GET'])
+def teacher_cho_sel_cno(cno=None):
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    sql = "select * from course where cno=?"
+    cursor = get_db()
+    result_set = cursor.execute(sql, (cno,)) 
+    cou = result_set.fetchone()
+    data = []
+    info = dict()
+    info['cno'] = cou[0]
+    info['cname'] = cou[1]
+    info['ccredit'] = cou[2]
+    data.append(info)
+    return render_template('teacher_cho_selrs.html', data=data)
+@app.route('/teacher_cho_set',methods=['POST','GET'])
+def teacher_cho_set():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    data = dict()
+    cursor = get_db()
+    period = cursor.execute("select period from period").fetchone()[0]
+    data['period'] = period
+    if period != '选课' :
+        return fail_msg(content="现在不是选课时期，不能开设课程")
+    if request.method == 'POST' :
+        cno = request.form['cno'].rsplit('-',2)[0]
+        tno = session['username'] 
+        clocation = request.form['clocation']
+        try :
+            cmaxcount = int(request.form['cmaxcount'])
+        except(ValueError) :
+            return fail_msg("课程容量应该是数字！","/teacher_cho_set")
+        ctime = request.form['ctime1'] + request.form['ctime2']
+        result_set = cursor.execute("select * from tc where tno=? and ctime=?",(tno,ctime)).fetchone()
+        if result_set :
+            return fail_msg('您在当前时间内已有开设课程，请选择其他时间', 'teacher_cho_set')
+        result_set=cursor.execute("select * from course where cno =?",(cno,))
+        if result_set.fetchone():
+            result_set = cursor.execute("select * from tc where cno = ?",(cno,))
+            if result_set.fetchone() :
+                return fail_msg(content="该课程已有教师开设，请选择其他课程", return_url="/teacher_cho_set")
+            sql="insert into tc(tno,cno,clocation,cmaxcount,ctime) values(?,?,?,?,?)"
+            cursor.execute(sql, (tno,cno,clocation,cmaxcount,ctime))
+            cursor.commit()
+            return success_msg(content="成功开设课程",return_url=url_for('teacher_cho_set'))
+        else:
+            return fail_msg(content="该课程不存在，请让管理员添加课程后再开设课程",return_url='/teacher_cho_set')
+    cous = cursor.execute("select * from course")
+    return render_template('teacher_cho_set.html',data=data,cous=cous)
+
+@app.route('/teacher_cho_seted/<tno>')
+def teacher_cho_seted(tno):
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    cous = cursor.execute("select * from tc where tno = ?",(tno,)).fetchall()
+    data = []
+    if cous :
+        for cou in cous :
+            info = dict()
+            info['cno'] = cou[1]
+            res = cursor.execute("select cname,ccredit from course where cno = ?",(cou[1],)).fetchone()
+            info['cname'] = res[0]
+            info['ccredit'] = res[1]
+            info['clocation'] = cou[2]
+            info['ctime'] = cou[4]
+            info['cmaxcount'] = cou[3]
+            result = cursor.execute("select count(*) from sc where cno = ?",(info['cno'],)).fetchone()
+            if result : 
+                info['cstudentcount'] = result[0]
+            else :
+                info['cstudentcount'] = 0
+            data.append(info)
+        return render_template('teacher_cho_seted.html',data=data,tno=tno)
+    else :
+        return render_template('teacher_cho_seted.html',data=None,tno=tno)
+@app.route('/teacher_frame')
+def teacher_frame():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_frame.html')
+
+@app.route('/teacher_main')
+def teacher_main():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    tname = cursor.execute("select tname from teacher where tno =?",(session['username'],))
+    period = cursor.execute("select period from period").fetchone()[0]
+    data = dict()
+    data['tno'] = session['username']
+    data['tname'] = tname.fetchone()[0]
+    data['lasttime'] = session['lasttime']
+    data['period'] = period
+    if period == '选课' :
+        data['message'] = u"你可以开设课程或信息查询,或提交成绩"
+    else :
+        data['message'] = u"你可以进行信息查询或提交成绩。"
+    return render_template('teacher_main.html',data=data)
+
+@app.route('/teacher_menu')
+def teacher_menu():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_menu.html')
+
+@app.route('/teacher_navi')
+def teacher_navi():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_navi.html')
+
+@app.route('/teacher_cou_cloud')
+def teacher_cou_cloud():
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    cous = cursor.execute("select sc.cno,cname,count(*) as count from sc,course where sc.cno = course.cno group by sc.cno order by sc.cno desc limit 0,10").fetchall()
+    tags = "<tags>"
+    for cou in cous :
+        link = "<a href='/teacher_cho_sel_cno/"+cou[0]+"' style='22' color='0xff0000' hicolor='0x00cc00'>"+cou[0]+"</a>"
+        tags = tags + link
+    tags = tags + "</tags>"
+    return render_template('tags_cloud.html',title='热门课程',tags=tags)
+
+@app.route('/teacher_tea_cloud')
+def teacher_tea_cloud():
+    if not session.get('role') :
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    teas = cursor.execute("select tc.tno,tname,count(*) as count from sc,tc,teacher where sc.cno=tc.cno and tc.tno=teacher.tno group by tc.tno order by count desc limit 0,10").fetchall()
+    tags = "<tags>"
+    for tea in teas :
+        link = "<a href='/teacher_sel_other_tno/"+tea[0]+"' style='22' color='0xff0000' hicolor='0x00cc00'>"+tea[0]+"</a>"
+        tags = tags + link
+    tags = tags + "</tags>"
+    return render_template('tags_cloud.html',title='热门教师',tags=tags)
+@app.route('/teacher_sel_other_tno/<tno>')
+def teacher_sel_other_tno(tno=None):
+    if not session.get('role'):
+        error = "您尚未登录"
+        return render_template("login.html",error=error)
+    sql = "select * from teacher where tno=?"
+    cursor = get_db()
+    result_set = cursor.execute(sql, (tno,)) 
+    tea = result_set.fetchone()
+    data = []
+    info = dict()
+    info['tno'] = tea[0]
+    info['tname'] = tea[1]
+    info['tphone'] = tea[2]
+    data.append(info)
+    return render_template('teacher_sel_other_rs.html', data=data)
+@app.route('/teacher_sel')
+def teacher_sel():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_sel.html')
+
+@app.route('/teacher_sel_other')
+def teacher_sel_other():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_sel_other.html')
+
+@app.route('/teacher_sel_other_rs',methods=['POST','GET'])
+def teacher_sel_other_rs():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    if request.method == 'POST' :
+        tno = '%'+request.form['tno']+'%'
+        tname = '%'+request.form['tname']+'%'
+        sql = "select * from teacher where tno like ? and tname like ?"
+        cursor = get_db()
+        result_set = cursor.execute(sql, (tno, tname)) 
+        teas = result_set.fetchall()
+        data = []
+        for tea in teas :
+            info = dict()
+            info['tno'] = tea[0]
+            info['tname'] = tea[1]
+            info['tphone'] = tea[2]
+            data.append(info)
+        return render_template('teacher_sel_other_rs.html', data=data)
+    return render_template('teacher_sel_other.html')
+
+@app.route('/teacher_sel_self')
+def teacher_sel_self():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    sql = "select * from teacher where tno = ?"
+    cursor = get_db()
+    result_set = cursor.execute(sql, (session['username'],))
+    tea = result_set.fetchone()
+    tdata = dict() 
+    tdata['tno'] = tea[0]
+    tdata['tname'] = tea[1]
+    tdata['tphone'] = tea[2]
+    tdata['tpassword'] = cursor.execute("select password from user where username= ?", (tea[0],)).fetchone()[0]
+    cdata = []
+    cous = cursor.execute("select course.cno,course.cname,course.ccredit from tc,course where tc.cno=course.cno and tno=? group by course.cno,course.cname,course.ccredit",(tdata['tno'],)).fetchall()
+    score = dict()
+    for cou in cous :
+        info = dict()
+        res = cursor.execute("select avg(grade),max(grade),min(grade),count(*) from sc where cno = ?",(cou[0],)).fetchone()
+        if res :
+            if  res[0]:
+                info["avg_grade"] = res[0]
+            else :
+                info["avg_grade"] = 0
+            if res[1] :
+                info["max_grade"] = res[1]
+            else :
+                info["max_grade"] = 0
+            if res[2] :
+                info["min_grade"] = res[2]
+            else :
+                info["min_grade"] = 0
+            if res[3] :
+                info["count"] = res[3]
+            else :
+                info["count"] = 0
+        else :
+            info["avg_grade"] = 0
+            info["max_grade"] = 0
+            info["min_grade"] = 0
+            info["count"] = 0
+        score[cou[0]] = info
+    return render_template('teacher_sel_self.html', tdata=tdata,cous=cous,score=score)
+
+@app.route('/teacher_sel_self_coul/<cno>')
+def teacher_sel_self_coul(cno):
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    ccredit = cursor.execute("select ccredit from course where cno=?",(cno,)).fetchone()[0]
+    snos = cursor.execute("select sno from sc where cno=?",(cno,)).fetchall()
+    data = dict()
+    data['cstatus'] = cursor.execute("select cstatus from tc where cno=?",(cno,)).fetchone()[0]
+    for sno in snos :
+        info =dict()
+        info['sname'] = cursor.execute("select sname from student where sno=?",(sno[0],)).fetchone()[0]
+        info["rank"] = cursor.execute("select count(*)+1 as count from sc as a,sc as b where a.grade>b.grade and a.cno=b.cno and a.cno=? and b.sno=?",(cno,sno[0])).fetchone()[0]
+        info["grade"] = cursor.execute("select grade from sc where sno=? and cno=?",(sno[0],cno)).fetchone()[0]
+        if not info["grade"] :
+            info["grade"] = 0
+        data[sno[0]] = info
+    return render_template('teacher_sel_self_coul.html',ccredit=ccredit,cno=cno,snos=snos,data=data)
+
+@app.route('/teacher_sub')
+def teacher_sub():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_sub.html')
+
+@app.route('/teacher_sub_cl/<status>',methods=['POST','GET'])
+def teacher_sub_cl(status):
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    cursor = get_db()
+    if status == 'subed' :
+        result_set = cursor.execute("select tc.cno,cname from tc,course where tc.cno=course.cno and tc.cstatus=? and tno=?",(u"已提交",session['username'])).fetchall()
+    else :
+        result_set = cursor.execute("select tc.cno,cname from tc,course where tc.cno=course.cno and (tc.cstatus is null or tc.cstatus!=?) and tno=?",(u"已提交",session['username'])).fetchall()
+    return render_template('teacher_sub_cl.html',data=result_set,cstatus=status)
+
+@app.route('/teacher_sub_input')
+def teacher_sub_input():
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    return render_template('teacher_sub_input.html')
+
+@app.route('/teacher_sub_score/<cno>',methods=['POST','GET'])
+def teacher_sub_score(cno) :
+    if not session.get('role') or session['role'] != 'teacher' :
+        error = "您尚未登录或您不是教师"
+        return render_template("login.html",error=error)
+    score_xls = request.files[cno]
+    if score_xls and allowed_file(score_xls.filename) :
+        score_xls_name = secure_filename(score_xls.filename)
+        score_xls.save(os.path.join(app.config['UPLOAD_FOLDER'], score_xls_name))
+    score_table = xlrd.open_workbook('static/score/'+score_xls_name).sheets()[0]
+    count_row = score_table.nrows
+    cursor = get_db()
+    str1 = "" 
+    for i in range(count_row) :
+        sno = score_table.row_values(i)[0]
+        grade = score_table.row_values(i)[1]
+        exist = cursor.execute("select * from sc where sno=?",(sno,)).fetchone()
+        if exist :
+            cursor.execute("update sc set grade=? where cno=? and sno=?",(grade,cno,sno))
+    cursor.execute("update tc set cstatus=? where cno=?",(u"已提交",cno))
+    cursor.commit()
+    return success_msg("成绩上传成功",'/teacher_sub_cl/subing')
+
+
+#   --------------teacher end--------------------
+
+#   --------------util start--------------------------
+def success_msg(content,return_url = None):
+    if not return_url :
+        return '<img src='+url_for('static', filename='image/t.png')+' ><font size=6 color=red>'+content+'</font>'
+    else :
+        return '<meta http-equiv="refresh" content=1;url="'+return_url+'">' +'\n'+'<img src='+url_for('static', filename='image/t.png')+' ><font size=6 color=red>'+content+'</font>'
+
+def fail_msg(content,return_url = None):
+    if not return_url :
+        return '<img src='+url_for('static',filename='image/f.png')+'><font size=6 color=red>'+content+'</font>'
+    else :
+        return '<meta http-equiv="refresh" content=1;url="'+return_url+'">' +'\n'+'<img src='+url_for('static',filename='image/f.png')+'><font size=6 color=red>'+content+'</font>'
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1] in ALLOWED_EXTENSIONS
+#   --------------util end--------------------------
+#	---------------run----------------------------
+if __name__ == '__main__' :
+	app.run(port=8081)
+
