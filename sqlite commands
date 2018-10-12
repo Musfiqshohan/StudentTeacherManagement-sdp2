@@ -1,0 +1,6 @@
+https://www.youtube.com/watch?v=QjICgmk31js&t=686s
+
+sqlite3 School.db  -open school db
+.tables   - to show all tables
+select * from teacher;  -to show any table
+.schema 	- all table structure
