@@ -1,0 +1,47 @@
+from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response
+from werkzeug.utils import secure_filename
+import sqlite3
+import os
+import sys
+import xlrd
+
+
+
+class MyServer:
+    def __init__(self):
+        self.globalData = "hello"
+
+
+    def function(self):
+        print("Here1")
+        return render_template("admin_stu_add.html")
+
+    def admin_stu_add(self):
+        print("Here2")
+        if not session.get('role') or session['role'] != 'admin':
+            error = "You are not logged in or you are not an administrator"
+            return render_template("login.html", error=error)
+        if request.method == 'POST':
+            cursor = get_db()
+            sno = request.form['sno']
+            sname = request.form['sname']
+            ssex = request.form['ssex']
+            sage = request.form['sage']
+            sdept = request.form['sdept']
+            sphone = request.form['sphone']
+            spassword = request.form['spassword']
+            result_set = cursor.execute("SELECT * FROM student WHERE sno =?", (sno,))
+            if result_set.fetchone():
+                return fail_msg(content="The student already exists", return_url='/admin_stu_add')
+            else:
+                sql = "insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
+                cursor.execute(sql, (sno, sname, ssex, sage, sdept, sphone))
+                cursor.execute("INSERT INTO user(username,password,role,lasttime) VALUES(?,?,?,?)",
+                               (sno, spassword, 'student', u'You are logging in to the system for the first time.'))
+                cursor.commit()
+                return success_msg(content="Successfully added the student", return_url=url_for('admin_stu_add'))
+        return render_template('admin_stu_add.html')
+
+from StuManager import get_db ,fail_msg,success_msg
+
+# 增加学生
