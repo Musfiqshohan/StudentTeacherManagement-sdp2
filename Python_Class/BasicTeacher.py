@@ -1,6 +1,8 @@
+from Python_Class.ComponentPerson import ComponentPerson
 
 
-class BasicTeacher:
+class BasicTeacher(ComponentPerson):
     def __init__(self):
-        self.globalData = "hello"
+        ComponentPerson.__init__(self)
+
         self.role = "Teacher"

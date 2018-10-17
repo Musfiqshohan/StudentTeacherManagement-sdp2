@@ -1,7 +1,11 @@
+from Python_Class.ComponentPerson import ComponentPerson
 
 
-class BasicStudent:
+class BasicStudent(ComponentPerson):
     def __init__(self):
-        self.globalData = "hello"
+        ComponentPerson.__init__(self)
+
         self.role= "Student"
+
+
 
