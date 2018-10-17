@@ -2,12 +2,17 @@
 # encoding: utf-8
 
 
-from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response
+from flask import Flask, request, session, g, redirect, url_for, render_template
 from werkzeug.utils import secure_filename
 import sqlite3
 import os
 import sys
 import xlrd
+
+from Python_Class.addStudent import MyServer
+
+
+
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -335,32 +340,75 @@ def admin_stu():
     return render_template('admin_stu.html')
 
 
+# class MyServer:
+#     def __init__(self):
+#         self.globalData = "hello"
+#
+#
+#     def function(self):
+#         print("Here1")
+#         return render_template("admin_stu_add.html")
+#
+#     def admin_stu_add(self):
+#         print("Here2")
+#         if not session.get('role') or session['role'] != 'admin':
+#             error = "You are not logged in or you are not an administrator"
+#             return render_template("login.html", error=error)
+#         if request.method == 'POST':
+#             cursor = get_db()
+#             sno = request.form['sno']
+#             sname = request.form['sname']
+#             ssex = request.form['ssex']
+#             sage = request.form['sage']
+#             sdept = request.form['sdept']
+#             sphone = request.form['sphone']
+#             spassword = request.form['spassword']
+#             result_set = cursor.execute("SELECT * FROM student WHERE sno =?", (sno,))
+#             if result_set.fetchone():
+#                 return fail_msg(content="The student already exists", return_url='/admin_stu_add')
+#             else:
+#                 sql = "insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
+#                 cursor.execute(sql, (sno, sname, ssex, sage, sdept, sphone))
+#                 cursor.execute("INSERT INTO user(username,password,role,lasttime) VALUES(?,?,?,?)",
+#                                (sno, spassword, 'student', u'You are logging in to the system for the first time.'))
+#                 cursor.commit()
+#                 return success_msg(content="Successfully added the student", return_url=url_for('admin_stu_add'))
+#         return render_template('admin_stu_add.html')
+
+
 # 增加学生
-@app.route('/admin_stu_add', methods=['POST', 'GET'])
+my_server = MyServer()
+
+@app.route('/admin_stu_add', methods=['POST', 'GET'])  #, methods=['POST', 'GET']
 def admin_stu_add():
-    if not session.get('role') or session['role'] != 'admin':
-        error = "You are not logged in or you are not an administrator"
-        return render_template("login.html", error=error)
-    if request.method == 'POST':
-        cursor = get_db()
-        sno = request.form['sno']
-        sname = request.form['sname']
-        ssex = request.form['ssex']
-        sage = request.form['sage']
-        sdept = request.form['sdept']
-        sphone = request.form['sphone']
-        spassword = request.form['spassword']
-        result_set = cursor.execute("SELECT * FROM student WHERE sno =?", (sno,))
-        if result_set.fetchone():
-            return fail_msg(content="The student already exists", return_url='/admin_stu_add')
-        else:
-            sql = "insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
-            cursor.execute(sql, (sno, sname, ssex, sage, sdept, sphone))
-            cursor.execute("INSERT INTO user(username,password,role,lasttime) VALUES(?,?,?,?)",
-                           (sno, spassword, 'student', u'You are logging in to the system for the first time.'))
-            cursor.commit()
-            return success_msg(content="Successfully added the student", return_url=url_for('admin_stu_add'))
-    return render_template('admin_stu_add.html')
+    return my_server.admin_stu_add()
+
+#
+# @app.route('/admin_stu_add', methods=['POST', 'GET'])
+# def admin_stu_add():
+#     if not session.get('role') or session['role'] != 'admin':
+#         error = "You are not logged in or you are not an administrator"
+#         return render_template("login.html", error=error)
+#     if request.method == 'POST':
+#         cursor = get_db()
+#         sno = request.form['sno']
+#         sname = request.form['sname']
+#         ssex = request.form['ssex']
+#         sage = request.form['sage']
+#         sdept = request.form['sdept']
+#         sphone = request.form['sphone']
+#         spassword = request.form['spassword']
+#         result_set = cursor.execute("SELECT * FROM student WHERE sno =?", (sno,))
+#         if result_set.fetchone():
+#             return fail_msg(content="The student already exists", return_url='/admin_stu_add')
+#         else:
+#             sql = "insert into student(sno,sname,ssex,sage,sdept,sphone) values(?,?,?,?,?,?)"
+#             cursor.execute(sql, (sno, sname, ssex, sage, sdept, sphone))
+#             cursor.execute("INSERT INTO user(username,password,role,lasttime) VALUES(?,?,?,?)",
+#                            (sno, spassword, 'student', u'You are logging in to the system for the first time.'))
+#             cursor.commit()
+#             return success_msg(content="Successfully added the student", return_url=url_for('admin_stu_add'))
+#     return render_template('admin_stu_add.html')
 
 
 @app.route('/admin_stu_import', methods=['POST', 'GET'])
@@ -677,7 +725,7 @@ def admin_tea_updrs():
 
 #   --------------------student start---------------
 
-@app.route('/student_cho')
+@app.route('/student_cho')    #gives the animation
 def student_cho():
     if not session.get('role') or session['role'] != 'student':
         error = "You are not logged in or you are not a student"
@@ -685,7 +733,7 @@ def student_cho():
     return render_template('student_cho.html')
 
 
-@app.route('/student_cho_del/<cno>', methods=['POST', 'GET'])
+@app.route('/student_cho_del/<cno>', methods=['POST', 'GET'])  #deletes a course
 def student_cho_del(cno):
     if not session.get('role') or session['role'] != 'student':
         error = "You are not logged in or you are not a student"
@@ -699,7 +747,7 @@ def student_cho_del(cno):
     return success_msg("successfully deleted", "/student_cho_sub")
 
 
-@app.route('/student_cho_sel', methods=['POST', 'GET'])
+@app.route('/student_cho_sel', methods=['POST', 'GET'])  #Query course information
 def student_cho_sel():
     if not session.get('role') or session['role'] != 'student':
         error = "You are not logged in or you are not a student"
