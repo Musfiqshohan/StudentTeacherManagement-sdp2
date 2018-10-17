@@ -742,7 +742,7 @@ def student_cho_del(cno):
     if cursor.execute("SELECT period FROM period ").fetchone()[0] != "Elective course":
         return fail_msg("It is not a class time now.，Cannot delete course")
     cursor.execute("DELETE FROM sc WHERE sno=? AND cno=?", (session['username'], cno))
-    print session['username']
+    print(session['username'])
     cursor.commit()
     return success_msg("successfully deleted", "/student_cho_sub")
 
@@ -822,8 +822,8 @@ def student_cou_cloud():
             0] + "</a>"
         tags = tags + link
     tags = tags + "</tags>"
-    print "zheli"
-    print tags
+    print("zheli")
+    print(tags)
     return render_template('tags_cloud.html', title='Popular course', tags=tags)
 
 
@@ -1139,8 +1139,8 @@ def teacher_cho_del():
     if request.method == 'POST':
         cnos = request.form.getlist('to_delete')
         for cno in cnos:
-            print "here"
-            print cno
+            print("here")
+            print(cno)
             cursor.execute("DELETE FROM tc WHERE cno =?", (cno,))
         cursor.commit()
         return success_msg(content="successfully deleted", return_url="/teacher_cho_del")
