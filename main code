@@ -3,6 +3,7 @@
 
 
 from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response
+from pymysql.tests.test_issues import reload
 from werkzeug.utils import secure_filename
 import sqlite3
 import os
@@ -707,7 +708,7 @@ def student_cho_sel_cno(cno=None):
     info['cselected'] = res[0]
     data.append(info)
     return render_template('student_cho_selrs.html',data=data)
-@app.route('/student_cou_cloud')
+@app.route('/student_cou_cloud'):
 def student_cou_cloud():
     if not session.get('role') :
         error = "您尚未登录"
