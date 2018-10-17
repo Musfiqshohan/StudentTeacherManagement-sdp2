@@ -14,8 +14,8 @@ from Python_Class.addStudent import MyServer
 
 
 
-reload(sys)
-sys.setdefaultencoding('utf-8')
+#reload(sys)
+#sys.setdefaultencoding('utf-8')
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'score')
 ALLOWED_EXTENSIONS = set(['xls', 'XLS'], )

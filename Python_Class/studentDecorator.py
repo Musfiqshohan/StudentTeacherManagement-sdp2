@@ -1,10 +1,9 @@
 # Python 3.4+
 from abc import ABC, abstractmethod
 from Python_Class.ComponentPerson import ComponentPerson
-class Abstract(ComponentPerson,ABC):
-    @abstractmethod
-    def foo(self):
-        pass
+class studentDecorator(ComponentPerson,ABC):
+    componentperson=ComponentPerson()
+
 
 # # Python 3.0+
 # from abc import ABCMeta, abstractmethod
