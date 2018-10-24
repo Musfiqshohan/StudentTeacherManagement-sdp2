@@ -6,6 +6,11 @@ import sys
 import xlrd
 
 
+from Python_Class.BasicStudent import BasicStudent
+from Python_Class.ComponentPerson import ComponentPerson
+
+
+
 
 class MyServer:
     def __init__(self):
@@ -16,20 +21,34 @@ class MyServer:
         print("Here1")
         return render_template("admin_stu_add.html")
 
-    def admin_stu_add(self):
+    def admin_stu_add(self,my_person):
         print("Here2")
         if not session.get('role') or session['role'] != 'admin':
             error = "You are not logged in or you are not an administrator"
             return render_template("login.html", error=error)
         if request.method == 'POST':
             cursor = get_db()
-            sno = request.form['sno']
-            sname = request.form['sname']
-            ssex = request.form['ssex']
-            sage = request.form['sage']
+            # sno = request.form['sno']
+            # sname = request.form['sname']
+            # ssex = request.form['ssex']
+            # sage = request.form['sage']
+            # sdept = request.form['sdept']
+            # sphone = request.form['sphone']
+            # spassword = request.form['spassword']
+
+            print("In adding student")
+            info=my_person.getDescription()
+
+            sno = info['Id']
+            sname = info['Name']
+            ssex = info['Gender']
+            sage = info['Age']
             sdept = request.form['sdept']
-            sphone = request.form['sphone']
-            spassword = request.form['spassword']
+            sphone = info['Phone']
+            spassword = info['Password']
+
+
+
             result_set = cursor.execute("SELECT * FROM student WHERE sno =?", (sno,))
             if result_set.fetchone():
                 return fail_msg(content="The student already exists", return_url='/admin_stu_add')

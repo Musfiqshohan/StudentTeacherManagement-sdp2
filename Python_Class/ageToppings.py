@@ -1,14 +1,17 @@
 from Python_Class.studentDecorator import studentDecorator
+
 class ageToppings(studentDecorator):
-    age=0
+
+
     def __init__(self,age,componentperson):
-        self.age=age
+        self.description=age
         self.componentperson=componentperson;
     
 
-
-
-
+    def getDescription(self):
+        info= self.componentperson.getDescription()
+        info["Age"]=self.description
+        return info
 
 
 

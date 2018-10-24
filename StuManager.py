@@ -9,6 +9,8 @@ import os
 import sys
 import xlrd
 
+from Python_Class.BasicStudent import BasicStudent
+from Python_Class.ComponentPerson import ComponentPerson
 from Python_Class.addStudent import MyServer
 
 
@@ -16,6 +18,13 @@ from Python_Class.addStudent import MyServer
 
 #reload(sys)
 #sys.setdefaultencoding('utf-8')
+from Python_Class.ageToppings import ageToppings
+from Python_Class.genderTopping import genderToppings
+from Python_Class.nameToppings import nameToppings
+from Python_Class.passwordToppings import passwordToppings
+from Python_Class.phonenumberToppings import phonenumberToppings
+from Python_Class.studentidtoppings import studentidtoppings
+
 app = Flask(__name__)
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'score')
 ALLOWED_EXTENSIONS = set(['xls', 'XLS'], )
@@ -378,10 +387,52 @@ def admin_stu():
 
 # 增加学生
 my_server = MyServer()
+my_person= BasicStudent()
 
 @app.route('/admin_stu_add', methods=['POST', 'GET'])  #, methods=['POST', 'GET']
 def admin_stu_add():
-    return my_server.admin_stu_add()
+    global my_person
+    return my_server.admin_stu_add(my_person)
+
+
+
+
+@app.route('/receivedata', methods=['POST'])
+def receive_data():
+    global my_person
+    print("in receiving")
+
+    if(request.form.get('sno')!=None):
+        my_person= studentidtoppings(request.form.get('sno'),my_person)
+        # print(request.form.get('sno'))
+
+    if (request.form.get('sname') != None):
+        my_person = nameToppings(request.form.get('sname'), my_person)
+        # print(request.form.get('sname'))
+
+    if (request.form.get('ssex') != None):
+        my_person = genderToppings(request.form.get('ssex'), my_person)
+
+    if (request.form.get('sage') != None):
+        my_person = ageToppings(request.form.get('sage'), my_person)
+
+    if (request.form.get('sphone') != None):
+        my_person = phonenumberToppings(request.form.get('sphone'), my_person)
+
+    if (request.form.get('spassword') != None):
+        my_person = passwordToppings(request.form.get('spassword'), my_person)
+
+
+    print(my_person.getDescription())
+
+    # print(request.form.get('ssex'))
+    # print(request.form.get('sage'))
+    # print(request.form.get('sphone'))
+    # print(request.form.get('spassword'))
+
+
+
+    return "shohan"
 
 #
 # @app.route('/admin_stu_add', methods=['POST', 'GET'])

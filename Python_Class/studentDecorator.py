@@ -1,8 +1,17 @@
 # Python 3.4+
 from abc import ABC, abstractmethod
 from Python_Class.ComponentPerson import ComponentPerson
-class studentDecorator(ComponentPerson,ABC):
-    componentperson=ComponentPerson()
+
+from abc import ABCMeta
+import  six
+@six.add_metaclass(ABCMeta)
+class studentDecorator(ComponentPerson):
+
+    def __init__(self):
+        componentperson = ComponentPerson()
+
+    def getDescription(self):
+        return ""
 
 
 # # Python 3.0+

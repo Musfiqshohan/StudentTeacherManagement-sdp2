@@ -2,8 +2,19 @@ from Python_Class.studentDecorator import studentDecorator
 
 
 class nameToppings(studentDecorator):
-    name=""
+
 
     def __init__(self, name, componentperson):
-        self.name = name
-        self.componentperson = componentperson;
+        self.description = name
+        self.componentperson = componentperson
+
+    # def getDescription(self):
+    #     return self.description+" "+self.componentperson.getDescription()
+
+    def getDescription(self):
+        info= self.componentperson.getDescription()
+        # print("In NameTop")
+        # print(info)
+        info["Name"]=self.description
+        # print(info)
+        return info
