@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Course Details</title>
+</head>
+<body>
+
+{#  extra#}
+    student info:
+    <table border = 1>
+         {% for cno, cname in student_data%}
+
+             <td>
+            <tr>{{ cno }}</tr>
+             <tr>{{ cname}}</tr>
+             <br>
+            </td>
+         {% endfor %}
+      </table>
+
+
+
+
+</body>
+</html>

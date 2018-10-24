@@ -798,6 +798,28 @@ def student_cho_del(cno):
     return success_msg("successfully deleted", "/student_cho_sub")
 
 
+# Edited by me
+@app.route('/student_enter_course/<cno>', methods=['POST', 'GET'])
+def student_enter_course(cno):
+    cursor = get_db()
+
+    query= "select * from student where sno in (SELECT sno from sc where cno=\'COM0018')"
+    # query="SELECT sno from sc where cno=\'COM0018'"
+    print(query)
+    student_result_set= cursor.execute(query)
+
+    data = []
+    for cou in student_result_set:
+        info =[]
+        info.append(cou[0])
+        info.append(cou[1])
+        print(info)
+        data.append(info)
+
+    # print(student_result_set)
+    return render_template('student_enter_course.html',student_data=data)
+
+
 @app.route('/student_cho_sel', methods=['POST', 'GET'])  #Query course information
 def student_cho_sel():
     if not session.get('role') or session['role'] != 'student':
@@ -971,7 +993,11 @@ def student_cho_sub():
     cous = cursor.execute(
         "SELECT sc.cno,cname,ccredit,tname,ctime,clocation FROM course,sc,tc,teacher WHERE sc.sno=? AND course.cno=sc.cno AND tc.cno=sc.cno AND tc.tno=teacher.tno",
         (session['username'],)).fetchall()
-    return render_template('student_cho_sub.html', cous=cous)
+
+    # extra
+    result={"1","2"}
+
+    return render_template('student_cho_sub.html', cous=cous, result=result)
 
 
 @app.route('/student_cho_sub_cno/<cno>', methods=['POST', 'GET'])

@@ -36,7 +36,8 @@
 {% if cous: %}
   {% for cou in cous : %}
         <tr align="center">
-		    		<td>{{ cou[0] }}</td>
+{#		    		<td>{{ cou[0] }}</td>#}
+		    		<td><a href="{{ url_for('student_enter_course',cno=cou[0]) }}" method='post'>{{ cou[0] }}</a></td>
 		    		<td>{{ cou[1] }}</td>
 		       	<td>{{ cou[2] }}</td>
             <td>{{ cou[3] }}</td>
@@ -50,6 +51,19 @@
 {% endif %}
 	</table>
 	<br><br><br>
+
+{#  extra#}
+    <table border = 1>
+         {% for key in result%}
+
+            <tr>
+               <th> {{ key }} </th>
+
+            </tr>
+
+         {% endfor %}
+      </table>
+
   <div align="center">
   <form name="formdelcou" action="{{ url_for('student_cho_sub') }}" method="post" onsubmit="return isValid(this);">
     <table class="table1" border="1" width="450" align="center" cellspacing="0" cellpadding="0">
